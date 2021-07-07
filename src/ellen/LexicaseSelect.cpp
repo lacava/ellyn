@@ -80,7 +80,6 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 		}
 	}
 
-
 	//boost::progress_timer timer;
 	//vector<float> fitcompare;
 	vector<int> pool; // pool from which to choose parent. normally it is set to the whole population.
@@ -92,13 +91,10 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 	else
 		numcases = d.vals.size()*p.train_pct + p.lex_metacases.size();
 
-	if (p.lexpool==1){
-		for (int i=0;i<pop.size();++i){
-			if(pop[i].error.size() == numcases)
-				pool.push_back(i);
-		}
+	for (int i=0;i<p.lexpool*pop.size();++i){
+		if(pop[i].error.size() == numcases)
+			pool.push_back(i);
 	}
-
 	vector <int> starting_pool = pool;
 	vector <int> case_order;
 	for(int i=0;i<pop[pool[0]].error.size();++i)
@@ -111,7 +107,7 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 	int h;
 	// vector<int> num_passes(numcases-p.lex_metacases.size(),0);
 	int tmp;
-  vector<float> epsilon; // epsilon values for each case
+    vector<float> epsilon; // epsilon values for each case
 
 	if (p.lex_eps_error_mad) { // errors within mad of the best error pass
 									 // get minimum error on each case
@@ -139,7 +135,7 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 					}
 				}
 		}
-		else{ // for non-global version, just save the epsilon values for each case
+		else if (!p.lex_eps_dynamic){ // for non-global, non-dynamic version, save the epsilon values for each case
 				for (size_t i = 0; i < numcases; ++i){
 					assert(mad_error[i] >= 0);
 					epsilon.push_back(mad_error[i]);
@@ -164,11 +160,13 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 				tmp = r[omp_get_thread_num()].rnd_int(0,pop.size()-1);
 				int n = 0;
 				while (pop[tmp].error.empty() && n < pop.size()) {
+                    std::cout << "pop at " << tmp << " has empty error?\n";
 					tmp = r[omp_get_thread_num()].rnd_int(0, pop.size() - 1);
 					n += 1;
 				}
 				pool.push_back(tmp);
 			}
+            std::cout << "done";
 		}
 		else //otherwise use the whole population for selection
 			pool = starting_pool;
@@ -208,13 +206,22 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 						minfit=pop[pool[j]].error[case_order[h]];
 					if (p.lex_eps_dynamic) // calculate MAD dynamically
 					{
-						pool_error[j] = pop[pool[j]].error[i];
+						pool_error[j] = pop[pool[j]].error[case_order[h]];
+						// i?? this should be getting the error for case_order[h]!
 					}
 				}
 				if (p.lex_eps_dynamic){
           // get dynamic epsilon
-					ep_dyn = mad(pool_error);
-
+					if (p.lex_eps_dynamic_rand){
+						ep_dyn = pool_error[r[omp_get_thread_num()].rnd_int(0, pool_error.size() - 1)]-minfit;
+						// cout << "ep_dyn: " << ep_dyn << "\n";
+					}
+					else{
+						ep_dyn = mad(pool_error);
+					}
+					// lex eps madcap
+					if (p.lex_eps_dynamic_madcap && r[omp_get_thread_num()].rnd_int(0,1)<0.5)
+						ep_dyn = 0;
 					// winners are within epsilon of the local pool's minimum fitness
 					for (int j=0;j<pool.size();++j){
 						if (pop[pool[j]].error[case_order[h]]<=minfit+ep_dyn)
@@ -269,19 +276,22 @@ void LexicaseSelect(vector<ind>& pop,vector<unsigned int>& parloc,params& p,vect
 			print_at_once += "winner pool is size " + to_string(winner.size()) + "\n";
 			print_at_once += "pool size:" + to_string(pool.size()) + "\n";
 			print_at_once += "minfit: " + to_string(minfit) + "\n";
+			// if (p.lex_eps_dynamic)
+			// 	print_at_once += "epsilon: " + to_string(ep_dyn) + "\n";
+			// else
 			print_at_once += "epsilon: " + to_string(epsilon[case_order[h]]) + "\n";
 			print_at_once += "minfit + epsilon: " + to_string(minfit+epsilon[case_order[h]]) + "\n";
 			print_at_once += "epsilon size:" + to_string(epsilon.size()) + "\n";
-			print_at_once += "epsilon:\n";
-			for (size_t i = 0; i< epsilon.size(); ++i)
-				print_at_once += to_string(epsilon[i]) + ",";
+			// print_at_once += "epsilon:\n";
+			// for (size_t i = 0; i< epsilon.size(); ++i)
+			// 	print_at_once += to_string(epsilon[i]) + ",";
 
 			print_at_once += "pool fitness cases:\n";
 			print_at_once += "case:\t";
 			for (size_t c =0; c<h; ++c){
 				print_at_once += to_string(case_order[c]) + ",";
 			}
-			print_at_once += "\n individual fitnesses";
+			print_at_once += "\n individual fitnesses\n";
 			for (size_t i=0; i<pool.size(); ++i){
 				print_at_once += to_string(i) + ":\t";
 				for (size_t c =0; c<h; ++c)

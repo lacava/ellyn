@@ -306,9 +306,17 @@ void eval(node& n,vector<float>& stack_float,vector<bool>& stack_bool)
 			n1 = stack_float.back(); stack_float.pop_back();
 			stack_float.push_back(sin(n1));
 			break;
+		case 'a':
+			n1 = stack_float.back(); stack_float.pop_back();
+			stack_float.push_back(asin(n1));
+			break;
 		case 'c':
 			n1 = stack_float.back(); stack_float.pop_back();
 			stack_float.push_back(cos(n1));
+			break;
+		case 'd':
+			n1 = stack_float.back(); stack_float.pop_back();
+			stack_float.push_back(acos(n1));
 			break;
 		case 'e':
 			n1 = stack_float.back(); stack_float.pop_back();
@@ -341,14 +349,13 @@ void eval(node& n,vector<float>& stack_float,vector<bool>& stack_bool)
 			break;
 		case '3':
 			n1 = stack_float.back(); stack_float.pop_back();
-			n2 = stack_float.back(); stack_float.pop_back();
-			// cube  n1
-			stack_float.push_back(pow(n1,n2));
+		    // cube  n1
+			stack_float.push_back(pow(n1,3));
 			break;
 		case '^':
 			n1 = stack_float.back(); stack_float.pop_back();
 			// safe sqrt of absolute value of n1
-			stack_float.push_back(pow(n1,3));
+			stack_float.push_back(pow(n1,n2));
 			break;
 		case '=': // equals
 			n1 = stack_float.back(); stack_float.pop_back();
@@ -491,14 +498,16 @@ void StandardFitness(ind& me,params& p,Data& d,state& s,FitnessEstimator& FE,uno
 					cout<<"wth";*/
 			}
 	}
-	//cout << "Equation" << count << ": f=" << me.eqn << "\n";
+	/* cout << "Equation: f=" << me.eqn << "\n"; */
 	bool pass=true;
 	if(!me.eqn.compare("unwriteable")==0){
 
 // calculate error
 		if(!p.EstimateFitness){
 			if(p.classification && p.class_m4gp)
+            {
 				Calc_M3GP_Output(me,p,d.vals,dattovar,d.target,s);
+            }
 			else if (p.classification)
 				CalcClassOutput(me,p,d.vals,dattovar,d.target,s);
 			else {
@@ -511,9 +520,14 @@ void StandardFitness(ind& me,params& p,Data& d,state& s,FitnessEstimator& FE,uno
 			vector<vector<float>> FEvals;
 			vector<float> FEtarget;
 			setFEvals(FEvals,FEtarget,FE,d);
-			if(p.classification && p.class_m4gp)  Calc_M3GP_Output(me,p,FEvals,dattovar,FEtarget,s);
-			else if(p.classification) CalcClassOutput(me,p,FEvals,dattovar,FEtarget,s);
-			else CalcOutput(me,p,FEvals,dattovar,FEtarget,s);
+			if(p.classification && p.class_m4gp)  
+                Calc_M3GP_Output(me,p,FEvals,dattovar,FEtarget,s);
+			else if(p.classification) 
+                CalcClassOutput(me,p,FEvals,dattovar,FEtarget,s);
+			else {
+                pass = CalcOutput(me,p,FEvals,dattovar,FEtarget,s);
+                CalcFitness(me,p,FEvals,dattovar,FEtarget,s, pass);
+            }
 		} // if estimate fitness
 		if (p.estimate_generality || p.PS_sel==2){
 				if (me.fitness == p.max_fit || me.fitness_v== p.max_fit || boost::math::isnan(me.fitness_v) || boost::math::isinf(me.fitness_v))
@@ -552,9 +566,6 @@ void StandardFitness(ind& me,params& p,Data& d,state& s,FitnessEstimator& FE,uno
 }
 void CalcFitness(ind& me, params& p, vector<vector<float>>& vals, vector<float>& dattovar, vector<float>& target, state& s, bool pass)
 {
-	float q = 0;
-	float var_target = 0;
-	float var_ind = 0;
 	float meanout = 0;
 	float meantarget = 0;
 	float meanout_v = 0;
@@ -634,9 +645,6 @@ void CalcFitness(ind& me, params& p, vector<vector<float>>& vals, vector<float>&
 
 		if (p.train && !p.test_at_end) // calc validation fitness
 		{
-			q = 0;
-			var_target = 0;
-			var_ind = 0;
 			// mean absolute error
 			me.abserror_v = me.abserror_v / ndata_v;
 			me.sq_error_v /= ndata_v;
@@ -1103,6 +1111,10 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 
 		/////////////////////////////////////////////////////////////////////////////////
 
+        /* cout << "me.output: "; */
+        /* for (auto o : me.output) cout << o << " "; */
+        /* cout << endl; */
+        /* cout << "me.abserror: " << me.abserror << endl; */
 		assert(me.output.size() == ndata_t);
 		// mean absolute error
 		me.abserror = me.abserror / ndata_t;
@@ -1122,10 +1134,7 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 	else if ( boost::math::isnan(me.abserror) || boost::math::isinf(me.abserror) )
 		me.fitness=p.max_fit;
 	else{
-		if (p.fit_type.compare("1")==0 || p.fit_type.compare("MAE")==0){
-			me.fitness = me.abserror;
-		}
-		else if (p.fit_type.compare("2")==0 || p.fit_type.compare("F1W")) {
+		if (p.fit_type.compare("2")==0 || p.fit_type.compare("F1W")==0) {
 			float precision, recall;
 			me.fitness = 0;
 			for (unsigned int i = 0; i < p.number_of_classes; ++i) {
@@ -1144,7 +1153,8 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 			}
 			me.fitness = 1 - me.fitness;
 		}
-		else if (p.fit_type.compare("3") == 0 || p.fit_type.compare("F1")) {
+		else if (p.fit_type.compare("3") == 0 || p.fit_type.compare("F1")==0) {
+
 			float precision, recall;
 			me.fitness = 0;
 			for (unsigned int i = 0; i < p.number_of_classes; ++i) {
@@ -1159,9 +1169,29 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 					recall = TP[i] / (TP[i] + FN[i]);
 
 				if (recall + precision != 0)
-					me.fitness += 2 * (precision*recall) / (precision + recall);
+					me.fitness += 2 * (precision*recall) / (precision + recall) / p.number_of_classes;
 			}
+
 			me.fitness = 1 - me.fitness;
+			if (me.fitness<0.01){
+				cout << "precision: " << precision << "\n";
+				cout << "recall: " << recall << "\n";
+				cout << "fitness: " << me.fitness << "\n";
+				cout << "TP: ";
+				for (auto i : TP)
+					cout << i << ",";
+				cout << "FP: ";
+				for (auto i : FP)
+					cout << i << ",";
+				cout << "FN: ";
+				for (auto i : TP)
+					cout << i << ",";
+				cout << "\n";
+
+			}
+		}
+        else {
+			me.fitness = me.abserror;
 		}
 		/*if (p.norm_error)
 			me.fitness = me.fitness/target_std;*/
@@ -1195,7 +1225,7 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 			if (p.fit_type.compare("1")==0 || p.fit_type.compare("MAE")==0) {
 				me.fitness_v = me.abserror_v;
 			}
-			else if (p.fit_type.compare("2")==0 || p.fit_type.compare("F1W")) {
+			else if (p.fit_type.compare("2")==0 || p.fit_type.compare("F1W")==0) {
 				float precision, recall;
 				me.fitness_v = 0;
 				for (unsigned int i = 0; i < p.number_of_classes; ++i) {
@@ -1215,7 +1245,7 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 				}
 				me.fitness_v = 1 - me.fitness_v;
 			}
-			else if (p.fit_type.compare("3") == 0 || p.fit_type.compare("F1")) {
+			else if (p.fit_type.compare("3") == 0 || p.fit_type.compare("F1")==0) {
 				float precision, recall;
 				me.fitness_v = 0;
 				for (unsigned int i = 0; i < p.number_of_classes; ++i) {
@@ -1231,9 +1261,26 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 						recall = TP_v[i] / (TP_v[i] + FN_v[i]);
 
 					if (recall + precision != 0)
-						me.fitness_v += 2 * (precision*recall) / (precision + recall);
+						me.fitness_v += 2 * (precision*recall) / (precision + recall) / p.number_of_classes;
 				}
 				me.fitness_v = 1 - me.fitness_v;
+				//debug
+				if (me.fitness_v<0.01){
+                    cout << "me.fitness_v is unusually small\n";
+					cout << "precision: " << precision << "\n";
+					cout << "recall: " << recall << "\n";
+					cout << "fitness_v: " << me.fitness_v << "\n";
+					cout << "TP: ";
+					for (auto i : TP)
+						cout << i << ",";
+					cout << "FP: ";
+					for (auto i : FP)
+						cout << i << ",";
+						cout << "FN: ";
+					for (auto i : TP)
+						cout << i << ",";
+					cout << "\n";
+				}
 			}
 		}
 
@@ -1264,8 +1311,10 @@ void Calc_M3GP_Output(ind& me,params& p,vector<vector<float>>& vals,vector<float
 	//	}
 	//}
 	int tmp = omp_get_thread_num();
-s.ptevals[omp_get_thread_num()]=s.ptevals[omp_get_thread_num()]+ptevals;
+    s.ptevals[omp_get_thread_num()]=s.ptevals[omp_get_thread_num()]+ptevals;
+    /* cout << "me.fitness: " << me.fitness << endl; */
 }
+
 void CalcClassOutput(ind& me,params& p,vector<vector<float>>& vals,vector<float>& dattovar,vector<float>& target,state& s)
 {
 	vector<float> stack_float;
@@ -1408,6 +1457,7 @@ void CalcClassOutput(ind& me,params& p,vector<vector<float>>& vals,vector<float>
 						if (target[sim]!=me.output_v[sim-ndata_t])
 							++me.abserror_v;
 					}
+
 			} // if stack empty
 			else{
 				pass=false;
@@ -1504,9 +1554,6 @@ bool CalcSlimOutput(ind& me,params& p,vector<vector<float>>& vals,vector<float>&
 	float SStot=0;
 	float SSreg=0;
 	float SSres=0;
-	float q = 0;
-	float var_target = 0;
-	float var_ind = 0;
 	bool pass = true;
 	float meanout=0;
 	float meantarget=0;
@@ -1629,10 +1676,7 @@ bool CalcSlimOutput(ind& me,params& p,vector<vector<float>>& vals,vector<float>&
 
 			if (p.train && !p.test_at_end)
 			{
-				q = 0;
-				var_target = 0;
-				var_ind = 0;
-					// mean absolute error
+                // mean absolute error
 				me.abserror_v = me.abserror_v/ndata_v;
 				me.sq_error_v /= ndata_v;
 				meantarget_v = meantarget_v/ndata_v;

@@ -58,12 +58,13 @@ void InitPop(vector<ind> &pop,params& p, vector<Randclass>& r)
 			else if (p.classification){
 				// choose dimensions of trees between 1 and max_len_init/min_len
 				int dims;
-
+                
 				if (p.class_m4gp) {
 					dims = r[omp_get_thread_num()].rnd_int(1, linelen);
 				}
 				else
 					dims = p.number_of_classes;
+                //cout << "dims: " << dims << "\n";
 
 				int remain_len = linelen;
 				vector<node> tmp_line;
@@ -75,12 +76,13 @@ void InitPop(vector<ind> &pop,params& p, vector<Randclass>& r)
 						treelen=1;
 					else if (treelen>p.max_len_init)
 						treelen=p.max_len_init;
-
+                    //cout << "making tree of length " << treelen << "\n";
 					makeline_rec(tmp_line,p,r,treelen);
 					pop[i].line.insert(pop[i].line.end(),tmp_line.begin(),tmp_line.end());
 					remain_len -= tmp_line.size();
 					tmp_line.clear();
 				}
+
 
 			}
 			else // make normal trees
@@ -264,6 +266,12 @@ void makeline(ind& newind,params& p,vector<Randclass>& r)
 			case 24: //or
 				newind.line.push_back(node('|'));
 				break;
+			case 25: // asin
+				newind.line.push_back(node('a'));
+				break;
+			case 26: // acos
+				newind.line.push_back(node('d'));
+				break;
 			}
 	}
 	/*while (newind.line.back()->type=='n'||newind.line.back()->type=='v')
@@ -331,6 +339,7 @@ void getChoice(int& choice, int min_arity, int max_arity, char type, params& p,v
 	}
 	else
 		choice = -1;
+
 }
 
 void push_back_node(vector <node>& line, int choice, params& p,vector<Randclass>& r)
@@ -452,6 +461,12 @@ void push_back_node(vector <node>& line, int choice, params& p,vector<Randclass>
 		case 24: //or
 			line.push_back(node('|'));
 			break;
+        case 25: // asin
+            line.push_back(node('a'));
+            break;
+        case 26: // acos
+            line.push_back(node('d'));
+            break;
 	}
 }
 void push_front_node(vector <node>& line, int choice, params& p,vector<Randclass>& r)
@@ -570,6 +585,12 @@ void push_front_node(vector <node>& line, int choice, params& p,vector<Randclass
 		case 24: //or
 			line.insert(line.begin(),node('|'));
 			break;
+        case 25: // asin
+            line.insert(line.begin(),node('a'));
+            break;
+        case 26: // acos
+            line.insert(line.begin(),node('d'));
+            break;
 	}
 }
 int maketree(vector<node>& line, int level, bool exactlevel, int lastnode,char type,params& p,vector<Randclass>& r)
@@ -594,7 +615,9 @@ int maketree(vector<node>& line, int level, bool exactlevel, int lastnode,char t
 	if (choice == -1)
 		cout << "bug\n";
 	// insert choice into line
-	push_front_node(line,choice,p,r);
+	//cout << "choice: " << p.op_choice[choice] << "\n";
+        
+    push_front_node(line,choice,p,r);
 	//int a = p.op_arity[choice];
 	int a = line[0].arity();
 	vector<char> types(a);

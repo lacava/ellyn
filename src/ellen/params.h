@@ -38,6 +38,7 @@ struct params {
 	int popsize; //population size
 	bool limit_evals; // limit evals instead of generations
 	long long max_evals; // maximum number of evals before termination (only active if limit_evals is true)
+    int time_limit; // maximum time in seconds to train
 
 	// Generation Settings
 	int sel; // 1: tournament 2: deterministic crowding 3: lexicase selection 4: age-fitness pareto algorithm
@@ -152,7 +153,11 @@ struct params {
 	float eHC_init;
 	bool eHC_mut; // epigenetic mutation rather than hill climbing
 	bool eHC_slim; // use SlimFitness
-	// Pareto settings
+        // stochastic gradient descent
+    bool SGD;
+    float learning_rate;
+     
+    // Pareto settings
 
 	bool prto_arch_on;
 	int prto_arch_size;
@@ -168,7 +173,7 @@ struct params {
 
 	// lexicase selection
 	float lexpool; // percent of population to use for lexicase selection events
-	bool lexage;// currently not used; up for deletion
+	bool lexage;// use afp survival after lexicase selection
 	bool lex_class; // use class-based fitness objectives instead of raw error
 	vector<string> lex_metacases; // extra cases to be used for lexicase selection
 	bool lex_eps_error; // errors within episilon of the best error are pass, otherwise fail
@@ -178,6 +183,9 @@ struct params {
 	bool lex_eps_error_mad; // errors in a standard dev of the best are pass, otherwise fail
 	bool lex_eps_global; // pass condition defined relative to whole population (rather than selection pool)
 	bool lex_eps_dynamic; // epsilon is defined relative to the pool instead of globally
+	bool lex_eps_dynamic_rand; /* epsilon is defined as a random threshold
+	corresponding to an error in the pool minus min error in pool*/
+	bool lex_eps_dynamic_madcap; // with prob of 0.5, epsilon is replaced with 0
 	float lex_epsilon;
 
 	// ==== Printing Options === //
@@ -221,6 +229,7 @@ struct params {
 		popsize=500; //population size
 		limit_evals=false; // limit evals instead of generations
 		max_evals=0; // maximum number of evals before termination (only active if limit_evals is true)
+        time_limit= 0; // maximum time in seconds to train
 		init_trees=1;
 		// Generation Settings
 		sel=1; // 1: tournament 2: deterministic crowding 3: lexicase selection 4: age-fitness pareto algorithm
@@ -341,6 +350,9 @@ struct params {
 		eHC_mut = 0; // epigenetic mutation rather than hill climbing
 		eHC_slim = 0; // use SlimFitness
 
+            // stochastic gradient descent
+        SGD = false;
+        learning_rate = 1.0;
 		// Pareto settings
 
 		prto_arch_on = 0;
@@ -356,7 +368,7 @@ struct params {
 		//seed = 0;
 
 		// lexicase selection
-		lexpool = 1;
+		lexpool = 1.0;
 		lexage = 0;
 		lex_class = 0;
 		lex_eps_error = false; // errors within episilon of the best error are pass, otherwise fail
@@ -367,6 +379,8 @@ struct params {
 		lex_epsilon = 0.1;
 		lex_eps_global = false; //pass conditions in lex eps defined relative to whole population (rather than selection pool).
 		lex_eps_dynamic = false;
+		lex_eps_dynamic_rand = false;
+		lex_eps_dynamic_madcap = false;
 		                       //should be true for regular lexicase (forced in load_params)
 		//pareto survival setting
 		PS_sel=1;
@@ -541,7 +555,11 @@ struct params {
 		if (d.has_key("eHC_slim"))
 			eHC_slim = extract<bool>(d["eHC_slim"]);
 		if (d.has_key("lexpool"))
+        {
+            std::cout << "getting lexpool\n";
 			lexpool = extract<float>(d["lexpool"]);
+            std::cout << "lexpool = " << lexpool << "\n";
+        }
 		if (d.has_key("prto_arch_on"))
 			prto_arch_on = extract<bool>(d["prto_arch_on"]);
 		if (d.has_key("prto_arch_size"))
@@ -588,6 +606,8 @@ struct params {
 			limit_evals = extract<bool>(d["limit_evals"]);
 		if (d.has_key("max_evals"))
 			max_evals = extract<long long>(d["max_evals"]);
+		if (d.has_key("time_limit"))
+			time_limit = extract<int>(d["time_limit"]);
 		if (d.has_key("print_homology"))
 			print_homology = extract<bool>(d["print_homology"]);
 		if (d.has_key("print_log"))
@@ -675,17 +695,27 @@ struct params {
 		if (d.has_key("lex_eps_error_mad"))
 			lex_eps_error_mad = extract<bool>(d["lex_eps_error_mad"]);
 		if (d.has_key("lex_epsilon"))
-			lex_epsilon = extract<bool>(d["lex_epsilon"]);
+			lex_epsilon = extract<float>(d["lex_epsilon"]);
 		if (d.has_key("lex_eps_global"))
 			lex_eps_global = extract<bool>(d["lex_eps_global"]);
 		if (d.has_key("lex_eps_dynamic"))
 			lex_eps_dynamic = extract<bool>(d["lex_eps_dynamic"]);
+		if (d.has_key("lex_eps_dynamic_rand"))
+				lex_eps_dynamic_rand = extract<bool>(d["lex_eps_dynamic_rand"]);
+		if (d.has_key("lex_eps_dynamic_madcap"))
+				lex_eps_dynamic_madcap = extract<bool>(d["lex_eps_dynamic_madcap"]);
 		if (d.has_key("test_at_end"))
 			test_at_end = extract<bool>(d["test_at_end"]);
 		if (d.has_key("verbosity"))
 			verbosity = extract<int>(d["verbosity"]);
 		if (d.has_key("return_pop"))
 			return_pop = extract<bool>(d["return_pop"]);
+		if (d.has_key("lexage"))
+			lexage = extract<bool>(d["lexage"]);
+        if (d.has_key("SGD"))
+            SGD = extract<bool>(d["SGD"]);
+        if (d.has_key("learning_rate"))
+            learning_rate = extract<float>(d["learning_rate"]);
 		// finished reading from dict.
 
 		allvars = intvars;
@@ -695,6 +725,7 @@ struct params {
 		allblocks.insert(allblocks.end(),seeds.begin(),seeds.end());
 
 		//seed = time(0);
+
 
 		if (max_len_init == 0)
 			max_len_init = max_len;
@@ -854,8 +885,23 @@ struct params {
 				op_arity.push_back(3);
 				return_type.push_back('b');
 			}
+			else if (op_list.at(i).compare("asin")==0)
+			{
+				op_choice.push_back(25);
+				op_arity.push_back(1);
+				return_type.push_back('f');
+			}
+			else if (op_list.at(i).compare("acos")==0)
+			{
+				op_choice.push_back(26);
+				op_arity.push_back(1);
+				return_type.push_back('f');
+			}
 			else
-				cout << "bad command (load params op_choice)" << "\n";
+            {
+				cout << "bad operator (load params op_choice): " 
+                     << op_list.at(i) << " not found\n";
+            }
 		}
 
 
@@ -906,7 +952,7 @@ struct params {
 			}
 		}
 
-		// debugging
+		// // debugging
 		// cout << "savename: " << savename << "\n";
 		// cout << "op_list: ";
 		// for (auto i : op_list){
@@ -928,6 +974,7 @@ struct params {
 		// 	cout << i << ",";
 		// }
 		// cout << "\n";
+		//
 
 		// turn off AR_nb if AR is not being used
 		if (!AR){
@@ -941,18 +988,14 @@ struct params {
 		// set train pct to 1 if train is zero
 		if (!train) train_pct=1;
 
-		// add lexage flag if age is a metacase
-		lexage=false;
-		for (unsigned i = 0; i<lex_metacases.size(); ++i)
-		{
-			if (lex_metacases[i].compare("age")==0)
-				lexage=true;
-		}
 		// turn on lex_eps_global if an epsilon method is not used
-		if (!lex_eps_global && !(lex_eps_std || lex_eps_error_mad || lex_eps_target_mad || lex_eps_error || lex_eps_target ))
+		if (!lex_eps_global 
+            && !(lex_eps_std || lex_eps_error_mad || lex_eps_target_mad 
+                 || lex_eps_error || lex_eps_target )
+           )
 			lex_eps_global = true;
 
-		// make min_len equal the number of classes if m3gp is used
+		// make min_len equal the number of classes if m4gp is used
 		if(class_m4gp && min_len < number_of_classes)
 			min_len = number_of_classes;
 

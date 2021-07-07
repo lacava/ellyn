@@ -92,7 +92,7 @@ void Generation(vector<ind>& pop,params& p,vector<Randclass>& r,Data& d,state& s
 		{
 			vector<unsigned int> parloc(pop.size());
 
-			if (p.lexage) // if age is a metacase
+			if (p.lexage || std::find(p.lex_metacases.begin(), p.lex_metacases.end(), "age") != p.lex_metacases.end()) // if lex+afp
 			{
 				// add one new individual
 				vector<ind> tmppop(1);
@@ -128,8 +128,18 @@ void Generation(vector<ind>& pop,params& p,vector<Randclass>& r,Data& d,state& s
 			//get mutation/crossover stats
 			s.setCrossPct(pop);
 
+			if (p.lexage) // if lex+afp
+			{// select new population with age-fitness pareto optimization
+				if (p.PS_sel==1) {// age-fitness tournaments
+					AgeFitSurvival(pop,p,r);
+				}
+				else{ // if using other objectives, use SPEA2 survival routine instead
+					ParetoSurvival(pop,p,r,s);
+				}
+			}
+
 			//elitism
-			if (p.elitism){ // replace (aggregate) worst ind with (aggregate) best ind
+			if (p.elitism & !p.lexage){ // replace (aggregate) worst ind with (aggregate) best ind
 				vector<ind>::iterator it_rm = std::max_element(pop.begin(),pop.end(),SortFit());
 				pop[it_rm-pop.begin()] = best;
 			}
@@ -187,6 +197,7 @@ void Generation(vector<ind>& pop,params& p,vector<Randclass>& r,Data& d,state& s
 			}
 			break;
 		}
+
 	default:
 		cout << "Bad p.sel parameter. " << endl;
 		break;
